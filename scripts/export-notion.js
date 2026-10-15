@@ -10,7 +10,7 @@ const databaseId = process.env.NOTION_DATABASE_ID;
 
 const getPropertyText = (prop) => {
   if (!prop || !prop.type) return '';
-  
+
   switch (prop.type) {
     case 'title':
     case 'rich_text':
@@ -30,14 +30,30 @@ const getPropertyText = (prop) => {
   }
 };
 
+async function fetchAllPages() {
+  const pages = [];
+  let startCursor;
+
+  do {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100,
+      start_cursor: startCursor,
+    });
+
+    pages.push(...response.results);
+    startCursor = response.has_more ? response.next_cursor : undefined;
+  } while (startCursor);
+
+  return pages;
+}
+
 async function exportCarriers() {
   console.log('📥 Получаем данные из Notion...');
-  
-  const response = await notion.databases.query({
-    database_id: databaseId,
-  });
 
-  const carriers = response.results.map((page) => {
+  const pages = await fetchAllPages();
+
+  const carriers = pages.map((page) => {
     const props = page.properties;
 
     return {
@@ -54,17 +70,30 @@ async function exportCarriers() {
     };
   });
 
+  // Сразу сортируем по рейтингу, чтобы UI не делал это при каждом запросе
+  carriers.sort((a, b) => {
+    if (a.rating === null && b.rating === null) {
+      return a.name.localeCompare(b.name, 'ru');
+    }
+    if (a.rating === null) return 1;
+    if (b.rating === null) return -1;
+    return b.rating - a.rating;
+  });
+
   // Сохраняем в public/data/carriers.json
   const outputPath = path.resolve(__dirname, '../public/data/carriers.json');
   const outputDir = path.dirname(outputPath);
-  
+
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
   fs.writeFileSync(outputPath, JSON.stringify(carriers, null, 2), 'utf-8');
-  
+
   console.log(`✅ Экспортировано ${carriers.length} перевозчиков в ${outputPath}`);
 }
 
-exportCarriers().catch(console.error);
+exportCarriers().catch((error) => {
+  console.error('❌ Ошибка экспорта:', error);
+  process.exitCode = 1;
+});

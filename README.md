@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Перевозчики Гродно
 
-## Getting Started
+Каталог перевозчиков на Next.js (App Router). Данные хранятся в Notion и экспортируются в JSON; сайт отдаёт статическую страницу с клиентским поиском и фильтрами.
 
-First, run the development server:
+## Возможности
+
+- Список карточек перевозчиков: рейтинг, телефон, грузоподъёмность, объём, тип авто, теги (нал/безнал, манипулятор)
+- Живой поиск по имени, телефону и описанию
+- Быстрые фильтры: «Все», «ТОЛЬКО НАЛ», «БЕЗНАЛ», «Манипулятор»
+- Звонок (`tel:`) и копирование номера в один клик
+
+## Стек
+
+- Next.js 16 (App Router) + React 19
+- TypeScript, Tailwind CSS 4
+- Notion API (только для выгрузки данных, не на рантайме)
+
+## Локальный запуск
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откройте [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Обновление данных из Notion
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Создайте файл `.env` в корне проекта:
 
-## Learn More
+   ```env
+   NOTION_API_KEY=secret_...
+   NOTION_DATABASE_ID=...
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+   Нужен интеграционный ключ Notion и ID базы с перевозчиками (share → copy link, ID — часть URL).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. Выгрузите данные:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```bash
+   npm run export:data
+   ```
 
-## Deploy on Vercel
+   Скрипт обходит все страницы базы (с пагинацией), сортирует по рейтингу и пишет `public/data/carriers.json`. После этого перезапустите/пересоберите сайт, чтобы изменения попали в страницу.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Структура
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+app/                 # страница и layout
+components/          # CarrierList, CarrierCard, иконки
+lib/types.ts         # общий тип Carrier
+lib/notion.ts        # чтение carriers.json для SSR
+public/data/         # carriers.json (снимок из Notion)
+scripts/export-notion.js
+```
+
+## Полезные команды
+
+| Команда | Описание |
+|---|---|
+| `npm run dev` | дев-сервер |
+| `npm run build` | продакшен-сборка |
+| `npm run start` | запуск собранного приложения |
+| `npm run lint` | ESLint |
+| `npm run export:data` | экспорт из Notion → JSON |

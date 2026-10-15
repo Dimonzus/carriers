@@ -1,12 +1,57 @@
 'use client';
 
 import { useState } from 'react';
-import { Carrier } from '@/lib/notion';
+import type { Carrier } from '@/lib/types';
 import CarrierCard from '@/components/CarrierCard';
+
+/** Приблизительная цена за город из notes: берём минимальное «городское» число 10–500 */
+function extractCityPrice(notes: string): number | null {
+  if (!notes) return null;
+  const text = notes.toLowerCase();
+  const prices = [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:р\b|руб)/g)]
+    .map((m) => parseFloat(m[1].replace(',', '.')))
+    .filter((n) => n >= 10 && n <= 500);
+  if (prices.length > 0) return Math.min(...prices);
+  const bare = [...text.matchAll(/\b(\d{2,3})\b/g)]
+    .map((m) => parseInt(m[1], 10))
+    .filter((n) => n >= 10 && n <= 500);
+  return bare.length > 0 ? Math.min(...bare) : null;
+}
+
+type SortMode = 'rating' | 'price_asc' | 'price_desc';
+type CapacityFilter = 'all' | 'light' | 'mid' | 'heavy';
+
+/** Все тоннажи из capacity: «4т», «1,5-2 тонны», «2 т; 4 т; 8 т» */
+function extractCapacities(capacity: string): number[] {
+  if (!capacity) return [];
+  let text = capacity.toLowerCase().replace(/(\d),(\d)/g, '$1.$2');
+  text = text.replace(/\([^)]*\)/g, ' ');
+  const nums = [...text.matchAll(/\d+(?:\.\d+)?/g)].map((m) => parseFloat(m[0]));
+  return nums.filter((n) => n >= 0.5 && n <= 30);
+}
+
+const capacityFilters: { key: CapacityFilter; label: string }[] = [
+  { key: 'all', label: 'Все' },
+  { key: 'light', label: 'до 2 т' },
+  { key: 'mid', label: '2–4 т' },
+  { key: 'heavy', label: 'от 4 т' },
+];
+
+function matchesCapacity(nums: number[], filter: CapacityFilter): boolean {
+  if (filter === 'all') return true;
+  if (nums.length === 0) return false;
+  return nums.some((n) => {
+    if (filter === 'light') return n <= 2;
+    if (filter === 'mid') return n > 2 && n <= 4;
+    return n > 4;
+  });
+}
 
 export default function CarrierList({ initialCarriers }: { initialCarriers: Carrier[] }) {
   const [search, setSearch] = useState('');
   const [filterTag, setFilterTag] = useState<string>('Все');
+  const [sortMode, setSortMode] = useState<SortMode>('rating');
+  const [capacityFilter, setCapacityFilter] = useState<CapacityFilter>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const tags = ['Все', 'ТОЛЬКО НАЛ', 'БЕЗНАЛ', 'Манипулятор'];
@@ -36,7 +81,21 @@ export default function CarrierList({ initialCarriers }: { initialCarriers: Carr
       }
     }
 
-    return matchesSearch && matchesTag;
+    return matchesSearch && matchesTag && matchesCapacity(extractCapacities(carrier.capacity), capacityFilter);
+  });
+
+  const sortedCarriers = [...filteredCarriers].sort((a, b) => {
+    if (sortMode === 'rating') {
+      const ra = a.rating ?? -1;
+      const rb = b.rating ?? -1;
+      return rb - ra;
+    }
+    const pa = extractCityPrice(a.notes);
+    const pb = extractCityPrice(b.notes);
+    if (pa === null && pb === null) return 0;
+    if (pa === null) return 1;
+    if (pb === null) return -1;
+    return sortMode === 'price_asc' ? pa - pb : pb - pa;
   });
 
   const copyToClipboard = async (text: string, id: string) => {
@@ -71,14 +130,14 @@ export default function CarrierList({ initialCarriers }: { initialCarriers: Carr
           />
         </div>
         
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 items-center overflow-x-auto pb-1 -mx-1 px-1">
           {tags.map((tag) => (
             <button
               key={tag}
               onClick={() => setFilterTag(tag)}
-              className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer shadow-sm ${
+              className={`shrink-0 whitespace-nowrap px-3 py-2 text-xs sm:px-5 sm:py-2.5 sm:text-sm rounded-full font-semibold transition-all duration-200 cursor-pointer shadow-sm ${
                 filterTag === tag
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md scale-105'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md sm:scale-105'
                   : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
               }`}
             >
@@ -86,11 +145,51 @@ export default function CarrierList({ initialCarriers }: { initialCarriers: Carr
             </button>
           ))}
         </div>
+
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex items-center gap-1 bg-white border-2 border-gray-200 rounded-full p-1 overflow-x-auto max-w-full">
+            <span className="px-1.5 sm:px-2 text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0"></span>
+            {capacityFilters.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setCapacityFilter(key)}
+                className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 cursor-pointer ${
+                  capacityFilter === key
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-emerald-50 hover:text-emerald-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1 bg-white border-2 border-gray-200 rounded-full p-1 overflow-x-auto max-w-full">
+            <span className="px-1.5 sm:px-2 text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">Сорт.</span>
+            {([
+              { key: 'rating', label: 'Рейтинг' },
+              { key: 'price_asc', label: 'Дешевле ↑' },
+              { key: 'price_desc', label: 'Дороже ↓' },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setSortMode(key)}
+                className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 cursor-pointer ${
+                  sortMode === key
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-amber-50 hover:text-amber-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Сетка карточек */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCarriers.map((carrier) => (
+        {sortedCarriers.map((carrier) => (
           <CarrierCard
             key={carrier.id}
             carrier={carrier}
@@ -101,7 +200,7 @@ export default function CarrierList({ initialCarriers }: { initialCarriers: Carr
       </div>
 
       {/* Пустое состояние */}
-      {filteredCarriers.length === 0 && (
+      {sortedCarriers.length === 0 && (
         <div className="text-center py-16">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-100 mb-4">
             <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
