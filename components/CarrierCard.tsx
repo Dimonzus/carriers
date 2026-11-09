@@ -124,12 +124,13 @@ export default function CarrierCard({ carrier, onCopy, isCopied }: CarrierCardPr
                     </span>
                   )}
                 </div>
-                {carrier.description && (
-                  <p className="text-sm text-slate-600 leading-relaxed line-clamp-2">
+               {carrier.description && (
+                  <p className="text-[12px] text-slate-600 leading-relaxed line-clamp-none">
                     {carrier.description}
                   </p>
                 )}
               </div>
+               
             </div>
           </div>
         </div>
